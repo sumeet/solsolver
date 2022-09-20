@@ -121,6 +121,10 @@ impl Card {
             _ => false,
         }
     }
+
+    fn is_next_or_prev(self, other: Self) -> bool {
+        self.is_next_card(other) || self.is_prev_card(other)
+    }
 }
 
 const NUM_PLAYING_STACKS: usize = 11;
@@ -243,6 +247,30 @@ impl Board {
                 }
             }
         }
+    }
+
+    fn next_boards(&self) -> Vec<Self> {
+        let mut boards = vec![];
+        for (src_index, src_stack) in self.playing_area.iter().enumerate() {
+            let src_card = src_stack.last().copied();
+            if src_card.is_none() {
+                continue;
+            }
+            let src_card = src_card.unwrap();
+
+            for (dst_index, dst_stack) in self.playing_area.iter().enumerate() {
+                if src_index == dst_index {
+                    continue;
+                }
+                if dst_stack.is_empty() || dst_stack.last().unwrap().is_next_or_prev(src_card) {
+                    let mut new_board = self.clone();
+                    let card = new_board.playing_area[src_index].pop().unwrap();
+                    new_board.playing_area[dst_index].push(card);
+                    boards.push(new_board);
+                }
+            }
+        }
+        boards
     }
 }
 
