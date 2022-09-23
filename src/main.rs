@@ -209,15 +209,17 @@ impl Board {
                 let last_card = last_card.unwrap();
 
                 // see if we can suck into minor collection pile
-                for minor_collection_pile in self.minor_collection_piles.iter_mut() {
-                    if minor_collection_pile
-                        .last()
-                        .unwrap()
-                        .is_next_card(last_card)
-                    {
-                        let card = self.playing_area[card_playing_area_index].pop().unwrap();
-                        minor_collection_pile.push(card);
-                        changed = true;
+                if self.minor_collection_blocked.is_none() {
+                    for minor_collection_pile in self.minor_collection_piles.iter_mut() {
+                        if minor_collection_pile
+                            .last()
+                            .unwrap()
+                            .is_next_card(last_card)
+                        {
+                            let card = self.playing_area[card_playing_area_index].pop().unwrap();
+                            minor_collection_pile.push(card);
+                            changed = true;
+                        }
                     }
                 }
 
