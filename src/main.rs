@@ -1,4 +1,7 @@
 #![feature(variant_count)]
+#![feature(exclusive_range_pattern)]
+
+use pathfinding::prelude::dijkstra;
 
 // Ace = 1
 // 2 = 2
@@ -8,7 +11,7 @@
 // J = 11
 // Q = 12
 // K = 13
-#[derive(Debug, Copy, Clone, PartialEq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 struct MinorValue(u8);
 
 impl MinorValue {
@@ -33,7 +36,7 @@ impl MinorValue {
 }
 
 // from 0 to 21
-#[derive(Debug, Copy, Clone, PartialEq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 struct MajorValue(u8);
 
 impl MajorValue {
@@ -50,7 +53,7 @@ impl MajorValue {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[repr(usize)]
 enum Suit {
     Sword,
@@ -73,7 +76,7 @@ impl Suit {
 
 const NUM_SUITS: usize = std::mem::variant_count::<Suit>();
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 enum Card {
     Major(MajorValue),
     Minor { suit: Suit, value: MinorValue },
@@ -110,7 +113,9 @@ impl Card {
 
     fn is_prev_card(self, other: Self) -> bool {
         match (self, other) {
-            (Card::Major(major), Card::Major(other_major)) => major.0 == other_major.0 - 1,
+            (Card::Major(MajorValue(major)), Card::Major(MajorValue(other_major @ (1..255)))) => {
+                major == other_major - 1
+            }
             (
                 Card::Minor { suit, value },
                 Card::Minor {
@@ -129,7 +134,7 @@ impl Card {
 
 const NUM_PLAYING_STACKS: usize = 11;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 struct Board {
     major_lower_stack: Vec<Card>,
     major_higher_stack: Vec<Card>,
@@ -139,6 +144,14 @@ struct Board {
 }
 
 impl Board {
+    fn start(&mut self) {
+        self.suck_readies_into_receptacles();
+    }
+
+    fn is_done(&self) -> bool {
+        self.playing_area.iter().all(|pile| pile.is_empty())
+    }
+
     fn parse(s: &str) -> Self {
         let mut playing_area = [
             vec![],
@@ -194,15 +207,9 @@ impl Board {
         while changed {
             changed = false;
 
-            // grab the last card of every stack
-            let mut last_cards = [None; NUM_PLAYING_STACKS];
-            for (stack, last_card) in self.playing_area.iter().zip(last_cards.iter_mut()) {
-                if let Some(card) = stack.last().copied() {
-                    *last_card = Some(card);
-                }
-            }
-
-            for (card_playing_area_index, last_card) in last_cards.into_iter().enumerate() {
+            for (playing_area_index, last_card) in
+                self.last_card_of_every_stack().into_iter().enumerate()
+            {
                 if last_card.is_none() {
                     continue;
                 }
@@ -216,7 +223,7 @@ impl Board {
                             .unwrap()
                             .is_next_card(last_card)
                         {
-                            let card = self.playing_area[card_playing_area_index].pop().unwrap();
+                            let card = self.playing_area[playing_area_index].pop().unwrap();
                             minor_collection_pile.push(card);
                             changed = true;
                         }
@@ -227,32 +234,43 @@ impl Board {
                 if self
                     .major_lower_stack
                     .last()
-                    .unwrap()
-                    .is_next_card(last_card)
+                    .map(|card| card.is_next_card(last_card))
+                    .unwrap_or(false)
                     || (self.major_lower_stack.is_empty()
                         && last_card == Card::Major(MajorValue::first()))
                 {
-                    let card = self.playing_area[card_playing_area_index].pop().unwrap();
-                    self.major_lower_stack.push(card);
+                    self.major_lower_stack
+                        .push(self.playing_area[playing_area_index].pop().unwrap());
                     changed = true;
                 } else if self
                     .major_higher_stack
                     .last()
-                    .unwrap()
-                    .is_prev_card(last_card)
+                    .map(|card| card.is_prev_card(last_card))
+                    .unwrap_or(false)
                     || (self.major_higher_stack.is_empty()
                         && last_card == Card::Major(MajorValue::last()))
                 {
-                    let card = self.playing_area[card_playing_area_index].pop().unwrap();
-                    self.major_higher_stack.push(card);
+                    self.major_higher_stack
+                        .push(self.playing_area[playing_area_index].pop().unwrap());
                     changed = true;
                 }
             }
         }
     }
 
+    fn last_card_of_every_stack(&mut self) -> [Option<Card>; 11] {
+        let mut last_cards = [None; NUM_PLAYING_STACKS];
+        for (stack, last_card) in self.playing_area.iter().zip(last_cards.iter_mut()) {
+            if let Some(card) = stack.last().copied() {
+                *last_card = Some(card);
+            }
+        }
+        last_cards
+    }
+
     fn next_boards(&self) -> Vec<Self> {
         let mut boards = vec![];
+
         for (src_index, src_stack) in self.playing_area.iter().enumerate() {
             let src_card = src_stack.last().copied();
             if src_card.is_none() {
@@ -266,8 +284,9 @@ impl Board {
                 }
                 if dst_stack.is_empty() || dst_stack.last().unwrap().is_next_or_prev(src_card) {
                     let mut new_board = self.clone();
-                    let card = new_board.playing_area[src_index].pop().unwrap();
-                    new_board.playing_area[dst_index].push(card);
+                    let src_card = new_board.playing_area[src_index].pop().unwrap();
+                    new_board.playing_area[dst_index].push(src_card);
+                    new_board.start();
                     boards.push(new_board);
                 }
             }
@@ -289,6 +308,19 @@ Q_CUP,3_SWO,21_MAJ,K_SWO,5_MAJ,7_WAN,9_MAJ
 4_SWO,6_MAJ,Q_STA,6_CUP,10_MAJ,10_WAN,8_STA
 2_MAJ,10_STA,5_SWO,15_MAJ,12_MAJ,4_STA,17_MAJ
 "#;
-    let b = Board::parse(init);
-    dbg!(b);
+    let mut b = Board::parse(init);
+    b.start();
+    dbg!(&b);
+    let r = dijkstra(
+        &b,
+        |b| {
+            b.next_boards().into_iter().map(|b| {
+                let score = b.score_lower_is_better();
+                dbg!(score);
+                (b, score)
+            })
+        },
+        Board::is_done,
+    );
+    dbg!(r.unwrap());
 }
