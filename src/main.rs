@@ -302,23 +302,6 @@ impl Board {
 
                 // see if we can suck into minor collection pile
                 if self.minor_collection_blocked.is_none() {
-                    match last_card {
-                        Card::Minor {
-                            value: MinorValue(2),
-                            ..
-                        } => {
-                            // println!(
-                            //     "{:?} {:?}",
-                            //     &self
-                            //         .last_card_of_every_stack()
-                            //         .map(|card| card.map(|card| card.to_string())),
-                            //     self.minor_collection_blocked.is_some(),
-                            // );
-                            // panic!("seen a 2 here but didn't suck it, what da hell")
-                        }
-                        _ => (),
-                    }
-
                     for minor_collection_pile in self.minor_collection_piles.iter_mut() {
                         if minor_collection_pile
                             .last()
@@ -357,6 +340,31 @@ impl Board {
                     let card = self.playing_area[playing_area_index].pop().unwrap();
                     self.major_higher_stack.push(card);
                     sucked_cards.push(card);
+                    changed = true;
+                }
+            }
+
+            if let Some(blocking_card) = self.minor_collection_blocked {
+                // TODO: slight duplication with above logic
+                if self
+                    .major_lower_stack
+                    .last()
+                    .map(|card| card.is_next_card(blocking_card))
+                    .unwrap_or(false)
+                {
+                    self.major_lower_stack.push(blocking_card);
+                    self.minor_collection_blocked = None;
+                    sucked_cards.push(blocking_card);
+                    changed = true;
+                } else if self
+                    .major_higher_stack
+                    .last()
+                    .map(|card| card.is_prev_card(blocking_card))
+                    .unwrap_or(false)
+                {
+                    self.major_higher_stack.push(blocking_card);
+                    self.minor_collection_blocked = None;
+                    sucked_cards.push(blocking_card);
                     changed = true;
                 }
             }
@@ -449,17 +457,17 @@ impl Board {
 }
 
 fn main() {
-    let init = r#"Q_SWO,9_CUP,2_STA,0_MAJ,2_CUP,8_STA,8_SWO
-    J_CUP,2_WAN,10_SWO,10_CUP,Q_CUP,6_CUP,20_MAJ
-    3_CUP,16_MAJ,7_WAN,J_WAN,14_MAJ,5_MAJ,4_WAN
-    Q_STA,10_STA,J_SWO,8_CUP,3_STA,4_MAJ,8_MAJ
-    13_MAJ,5_CUP,7_STA,10_MAJ,11_MAJ,Q_WAN,12_MAJ
-    
-    3_MAJ,2_MAJ,J_STA,7_CUP,4_CUP,7_MAJ,4_STA
-    7_SWO,18_MAJ,9_WAN,3_SWO,K_WAN,2_SWO,9_MAJ
-    6_MAJ,5_SWO,17_MAJ,9_SWO,5_WAN,6_STA,6_WAN
-    K_SWO,6_SWO,8_WAN,4_SWO,21_MAJ,5_STA,3_WAN
-    15_MAJ,1_MAJ,10_WAN,9_STA,K_STA,K_CUP,19_MAJ"#;
+    let init = r#"9_SWO,3_STA,9_CUP,18_MAJ,6_SWO,J_SWO,K_STA
+19_MAJ,7_WAN,10_SWO,8_WAN,4_MAJ,8_STA,6_CUP
+1_MAJ,5_WAN,8_SWO,17_MAJ,9_MAJ,9_STA,J_WAN
+10_CUP,7_SWO,10_STA,3_CUP,2_STA,2_CUP,7_CUP
+9_WAN,3_SWO,7_MAJ,10_WAN,7_STA,Q_CUP,J_STA
+
+13_MAJ,8_CUP,5_CUP,J_CUP,11_MAJ,21_MAJ,5_STA
+K_WAN,6_MAJ,Q_SWO,14_MAJ,4_WAN,4_SWO,16_MAJ
+6_WAN,3_WAN,K_SWO,5_MAJ,12_MAJ,2_SWO,4_CUP
+3_MAJ,20_MAJ,8_MAJ,Q_STA,Q_WAN,0_MAJ,6_STA
+K_CUP,2_WAN,4_STA,2_MAJ,10_MAJ,15_MAJ,5_SWO"#;
     let mut b = Board::parse(init);
     b.start();
     dbg!(&b);
@@ -468,9 +476,8 @@ fn main() {
         &(b, None),
         |(b, path)| {
             b.next_boards()
-                .iter()
-                .map(|(board, moov)| ((board.clone(), Some(*moov)), 1))
-                .collect::<Vec<_>>()
+                .into_iter()
+                .map(|(board, moov)| ((board.clone(), Some(moov)), 1))
         },
         |(b, _move)| b.score_lower_is_better(),
         |(b, _move)| b.is_done(),
