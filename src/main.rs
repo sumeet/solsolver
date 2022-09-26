@@ -1,7 +1,8 @@
 #![feature(variant_count)]
 #![feature(exclusive_range_pattern)]
 
-use pathfinding::prelude::dijkstra;
+use itertools::Itertools;
+use pathfinding::prelude::{astar, dijkstra};
 use std::collections::HashSet;
 use std::fmt::{Debug, Display, Formatter, Write};
 use std::hash::{Hash, Hasher};
@@ -30,10 +31,11 @@ struct Move {
 
 impl Display for Move {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        f.write_str("Card ")?;
         Display::fmt(&self.card, f)?;
-        f.write_str(" ")?;
+        f.write_str(" Pile ")?;
         Display::fmt(&self.from, f)?;
-        f.write_str(" -> ")?;
+        f.write_str(" -> Pile ")?;
         Display::fmt(&self.to, f)
     }
 }
@@ -175,14 +177,17 @@ impl Card {
 
     fn is_next_card(self, next_card: Self) -> bool {
         match (self, next_card) {
-            (Card::Major(major), Card::Major(other_major)) => major.0 == other_major.0 + 1,
+            (Card::Major(this_value), Card::Major(next_value)) => this_value.0 + 1 == next_value.0,
             (
-                Card::Minor { suit, value },
                 Card::Minor {
-                    suit: other_suit,
-                    value: other_value,
+                    suit,
+                    value: this_value,
                 },
-            ) => suit == other_suit && value.0 + 1 == other_value.0,
+                Card::Minor {
+                    suit: next_suit,
+                    value: next_value,
+                },
+            ) => suit == next_suit && this_value.0 + 1 == next_value.0,
             _ => false,
         }
     }
@@ -193,12 +198,15 @@ impl Card {
                 this_val == prev_val + 1
             }
             (
-                Card::Minor { suit, value },
                 Card::Minor {
-                    suit: other_suit,
-                    value: other_value,
+                    suit,
+                    value: this_val,
                 },
-            ) => suit == other_suit && value.0 == other_value.0 - 1,
+                Card::Minor {
+                    suit: prev_suit,
+                    value: prev_val,
+                },
+            ) => suit == prev_suit && this_val.0 == prev_val.0 + 1,
             _ => false,
         }
     }
@@ -229,11 +237,11 @@ impl Board {
         }
 
         let sucked_cards = self.suck_readies_into_receptacles();
-        if sucked_cards.len() > 0 {
-            if SEEN_SUCKED.lock().unwrap().insert(sucked_cards.clone()) {
-                println!("Sucked cards: {:?}", sucked_cards);
-            }
-        }
+        // if sucked_cards.len() > 0 {
+        //     if SEEN_SUCKED.lock().unwrap().insert(sucked_cards.clone()) {
+        //         // println!("Sucked cards: {:?}", sucked_cards);
+        //     }
+        // }
     }
 
     fn is_done(&self) -> bool {
@@ -430,6 +438,7 @@ impl Board {
             }
         }
 
+        // unblock the minor collection piles
         if let Some(card) = self.minor_collection_blocked {
             // TODO: this is duplicated from above, we could consolidate if need be
             for (dst_index, dst_stack) in self.playing_area.iter().enumerate() {
@@ -453,25 +462,49 @@ impl Board {
 }
 
 fn main() {
-    let init = r#"12_MAJ,5_MAJ,6_CUP,7_STA,2_SWO,Q_STA,3_SWO
-2_STA,4_WAN,5_STA,1_MAJ,3_CUP,2_WAN,9_STA
-5_CUP,K_CUP,5_WAN,14_MAJ,5_SWO,6_SWO,10_CUP
-K_SWO,Q_SWO,J_WAN,0_MAJ,13_MAJ,7_MAJ,9_CUP
-3_MAJ,4_CUP,2_MAJ,2_CUP,4_STA,17_MAJ,16_MAJ
+    let init = r#"17_MAJ,J_WAN,6_STA,9_SWO,4_STA,10_STA,8_MAJ
+K_SWO,16_MAJ,10_WAN,Q_CUP,20_MAJ,0_MAJ,1_MAJ
+18_MAJ,11_MAJ,9_MAJ,5_MAJ,21_MAJ,2_MAJ,6_WAN
+7_MAJ,4_CUP,K_STA,4_WAN,2_CUP,J_STA,5_WAN
+4_MAJ,8_WAN,15_MAJ,10_CUP,2_SWO,2_STA,3_CUP
 
-K_WAN,8_STA,Q_WAN,Q_CUP,18_MAJ,8_MAJ,8_CUP
-J_SWO,10_WAN,10_STA,6_MAJ,10_MAJ,7_SWO,10_SWO
-20_MAJ,4_MAJ,7_WAN,6_WAN,8_WAN,4_SWO,3_WAN
-3_STA,8_SWO,J_STA,9_WAN,19_MAJ,11_MAJ,K_STA
-9_SWO,9_MAJ,J_CUP,21_MAJ,15_MAJ,7_CUP_6_STA"#;
+9_WAN,14_MAJ,9_STA,13_MAJ,7_SWO,5_CUP,Q_STA
+K_WAN,9_CUP,7_STA,Q_WAN,7_WAN,J_SWO,8_CUP
+5_STA,8_STA,10_SWO,7_CUP,10_MAJ,Q_SWO,4_SWO
+3_WAN,3_SWO,19_MAJ,6_MAJ,J_CUP,6_SWO,6_CUP
+3_MAJ,2_WAN,12_MAJ,5_SWO,3_STA,K_CUP,8_SWO"#;
     let mut b = Board::parse(init);
     b.start();
+    dbg!(&b);
     // let next_boards = b.next_boards();
     // for (_, moov) in next_boards {
     //     println!("{}", moov);
     // }
+    // return;
+
+    let (path, score): (Vec<(Board, Option<Move>)>, usize) = astar(
+        &(b, None),
+        |(b, path)| {
+            b.next_boards()
+                .iter()
+                .map(|(board, moov)| ((board.clone(), Some(*moov)), 1))
+                .collect::<Vec<_>>()
+        },
+        |(b, _move)| b.score_lower_is_better(),
+        |(b, _move)| b.is_done(),
+    )
+    .unwrap();
+    dbg!(path
+        .iter()
+        .filter_map(|i| i.1.map(|i| i.to_string()))
+        .collect::<Vec<_>>());
+    return;
+
     let mut q = vec![(b, vec![])];
     let mut seen = HashSet::new();
+    let mut max_moves_path = vec![];
+    let mut max_moves_board = None;
+
     'outer: while !q.is_empty() {
         let mut next_q = vec![];
 
@@ -480,6 +513,25 @@ J_SWO,10_WAN,10_STA,6_MAJ,10_MAJ,7_SWO,10_SWO
                 continue;
             }
             seen.insert(board.clone());
+
+            if path.len() > max_moves_path.len() {
+                max_moves_path = path.clone();
+                max_moves_board = Some(board.clone());
+            }
+
+            // println!(
+            //     "{:?}|{} >>>>> {}",
+            //     board.minor_collection_blocked.is_some(),
+            //     board
+            //         .last_card_of_every_stack()
+            //         .map(|c| c.map(|c| c.to_string()).unwrap_or("".to_string()))
+            //         .join(" | "),
+            //     board
+            //         .minor_collection_piles
+            //         .iter()
+            //         .map(|p| p.last().map(|c| c.to_string()).unwrap_or("".to_string()))
+            //         .join(" | ")
+            // );
 
             if board.is_done() {
                 dbg!("solved", &board);
@@ -496,5 +548,9 @@ J_SWO,10_WAN,10_STA,6_MAJ,10_MAJ,7_SWO,10_SWO
             }
         }
         q = next_q;
+    }
+
+    for moov in max_moves_path {
+        println!("{}", moov);
     }
 }
