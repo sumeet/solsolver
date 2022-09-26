@@ -286,6 +286,8 @@ impl Board {
             .iter()
             .map(|stack| stack.len())
             .sum::<usize>()
+            // TODO: sometimes commenting this bottom part out makes it so we complete instead of not completing ???
+            + self.minor_collection_blocked.is_some() as usize
     }
 
     fn suck_readies_into_receptacles(&mut self) -> Vec<Card> {
@@ -460,17 +462,17 @@ impl Board {
 }
 
 fn main() {
-    let init = r#"J_CUP,8_CUP,9_WAN,J_STA,21_MAJ,4_CUP,9_CUP
- 1_MAJ,7_MAJ,10_SWO,15_MAJ,8_STA,6_CUP,10_STA
- K_SWO,Q_WAN,7_SWO,18_MAJ,12_MAJ,7_CUP,6_MAJ
- 4_MAJ,Q_SWO,5_MAJ,10_WAN,2_CUP,20_MAJ,7_STA
- 3_WAN,14_MAJ,K_STA,K_CUP,13_MAJ,Q_STA,J_SWO
- 
- 8_MAJ,4_STA,9_MAJ,3_STA,5_SWO,2_SWO,4_SWO
- Q_CUP,9_SWO,2_STA,K_WAN,19_MAJ,10_CUP,2_MAJ
- 3_MAJ,5_STA,8_WAN,10_MAJ,6_SWO,2_WAN,16_MAJ
- 11_MAJ,J_WAN,0_MAJ,6_WAN,7_WAN,5_CUP,3_SWO
- 8_SWO,17_MAJ,5_WAN,6_STA,4_WAN,3_CUP,9_STA"#;
+    let init = r#"18_MAJ,4_STA,6_CUP,9_WAN,4_MAJ,6_MAJ,9_MAJ
+9_STA,2_STA,7_STA,0_MAJ,6_STA,4_WAN,5_CUP
+9_SWO,7_SWO,J_STA,Q_WAN,3_CUP,7_MAJ,8_CUP
+2_CUP,Q_SWO,J_CUP,J_WAN,9_CUP,7_CUP,3_WAN
+19_MAJ,20_MAJ,11_MAJ,10_SWO,10_MAJ,10_STA,3_SWO
+
+2_SWO,J_SWO,K_SWO,5_SWO,5_WAN,21_MAJ,8_STA
+13_MAJ,6_SWO,10_WAN,4_SWO,6_WAN,3_MAJ,3_STA
+10_CUP,K_CUP,15_MAJ,8_WAN,Q_CUP,2_WAN,17_MAJ
+K_STA,4_CUP,8_MAJ,1_MAJ,7_WAN,5_MAJ,5_STA
+8_SWO,14_MAJ,2_MAJ,Q_STA,K_WAN,12_MAJ,16_MAJ"#;
     let mut b = Board::parse(init);
     b.start();
     dbg!(&b);
