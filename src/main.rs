@@ -1,7 +1,6 @@
 #![feature(variant_count)]
 #![feature(exclusive_range_pattern)]
 
-use itertools::Itertools;
 use pathfinding::prelude::{astar, dijkstra};
 use std::collections::HashSet;
 use std::fmt::{Debug, Display, Formatter, Write};
@@ -227,21 +226,9 @@ struct Board {
     playing_area: [Vec<Card>; NUM_PLAYING_STACKS],
 }
 
-use lazy_static::lazy_static;
-use std::sync::Mutex;
-
 impl Board {
     fn start(&mut self) {
-        lazy_static! {
-            static ref SEEN_SUCKED: Mutex<HashSet<Vec<Card>>> = Mutex::new(HashSet::new());
-        }
-
-        let sucked_cards = self.suck_readies_into_receptacles();
-        // if sucked_cards.len() > 0 {
-        //     if SEEN_SUCKED.lock().unwrap().insert(sucked_cards.clone()) {
-        //         // println!("Sucked cards: {:?}", sucked_cards);
-        //     }
-        // }
+        self.suck_readies_into_receptacles();
     }
 
     fn is_done(&self) -> bool {
@@ -462,25 +449,20 @@ impl Board {
 }
 
 fn main() {
-    let init = r#"17_MAJ,J_WAN,6_STA,9_SWO,4_STA,10_STA,8_MAJ
-K_SWO,16_MAJ,10_WAN,Q_CUP,20_MAJ,0_MAJ,1_MAJ
-18_MAJ,11_MAJ,9_MAJ,5_MAJ,21_MAJ,2_MAJ,6_WAN
-7_MAJ,4_CUP,K_STA,4_WAN,2_CUP,J_STA,5_WAN
-4_MAJ,8_WAN,15_MAJ,10_CUP,2_SWO,2_STA,3_CUP
-
-9_WAN,14_MAJ,9_STA,13_MAJ,7_SWO,5_CUP,Q_STA
-K_WAN,9_CUP,7_STA,Q_WAN,7_WAN,J_SWO,8_CUP
-5_STA,8_STA,10_SWO,7_CUP,10_MAJ,Q_SWO,4_SWO
-3_WAN,3_SWO,19_MAJ,6_MAJ,J_CUP,6_SWO,6_CUP
-3_MAJ,2_WAN,12_MAJ,5_SWO,3_STA,K_CUP,8_SWO"#;
+    let init = r#"Q_SWO,9_CUP,2_STA,0_MAJ,2_CUP,8_STA,8_SWO
+    J_CUP,2_WAN,10_SWO,10_CUP,Q_CUP,6_CUP,20_MAJ
+    3_CUP,16_MAJ,7_WAN,J_WAN,14_MAJ,5_MAJ,4_WAN
+    Q_STA,10_STA,J_SWO,8_CUP,3_STA,4_MAJ,8_MAJ
+    13_MAJ,5_CUP,7_STA,10_MAJ,11_MAJ,Q_WAN,12_MAJ
+    
+    3_MAJ,2_MAJ,J_STA,7_CUP,4_CUP,7_MAJ,4_STA
+    7_SWO,18_MAJ,9_WAN,3_SWO,K_WAN,2_SWO,9_MAJ
+    6_MAJ,5_SWO,17_MAJ,9_SWO,5_WAN,6_STA,6_WAN
+    K_SWO,6_SWO,8_WAN,4_SWO,21_MAJ,5_STA,3_WAN
+    15_MAJ,1_MAJ,10_WAN,9_STA,K_STA,K_CUP,19_MAJ"#;
     let mut b = Board::parse(init);
     b.start();
     dbg!(&b);
-    // let next_boards = b.next_boards();
-    // for (_, moov) in next_boards {
-    //     println!("{}", moov);
-    // }
-    // return;
 
     let (path, score): (Vec<(Board, Option<Move>)>, usize) = astar(
         &(b, None),
@@ -498,59 +480,4 @@ K_WAN,9_CUP,7_STA,Q_WAN,7_WAN,J_SWO,8_CUP
         .iter()
         .filter_map(|i| i.1.map(|i| i.to_string()))
         .collect::<Vec<_>>());
-    return;
-
-    let mut q = vec![(b, vec![])];
-    let mut seen = HashSet::new();
-    let mut max_moves_path = vec![];
-    let mut max_moves_board = None;
-
-    'outer: while !q.is_empty() {
-        let mut next_q = vec![];
-
-        for (board, mut path) in q.into_iter() {
-            if seen.contains(&board) {
-                continue;
-            }
-            seen.insert(board.clone());
-
-            if path.len() > max_moves_path.len() {
-                max_moves_path = path.clone();
-                max_moves_board = Some(board.clone());
-            }
-
-            // println!(
-            //     "{:?}|{} >>>>> {}",
-            //     board.minor_collection_blocked.is_some(),
-            //     board
-            //         .last_card_of_every_stack()
-            //         .map(|c| c.map(|c| c.to_string()).unwrap_or("".to_string()))
-            //         .join(" | "),
-            //     board
-            //         .minor_collection_piles
-            //         .iter()
-            //         .map(|p| p.last().map(|c| c.to_string()).unwrap_or("".to_string()))
-            //         .join(" | ")
-            // );
-
-            if board.is_done() {
-                dbg!("solved", &board);
-                break 'outer;
-            }
-            for (next_board, moov) in board.next_boards() {
-                if seen.contains(&next_board) {
-                    continue;
-                }
-
-                let mut path = path.clone();
-                path.push(moov);
-                next_q.push((next_board, path));
-            }
-        }
-        q = next_q;
-    }
-
-    for moov in max_moves_path {
-        println!("{}", moov);
-    }
 }
