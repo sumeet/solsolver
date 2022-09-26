@@ -282,7 +282,10 @@ impl Board {
     }
 
     fn score_lower_is_better(&self) -> usize {
-        self.playing_area.iter().map(|stack| stack.len()).sum()
+        self.playing_area
+            .iter()
+            .map(|stack| stack.len())
+            .sum::<usize>()
     }
 
     fn suck_readies_into_receptacles(&mut self) -> Vec<Card> {
@@ -457,17 +460,17 @@ impl Board {
 }
 
 fn main() {
-    let init = r#"9_SWO,3_STA,9_CUP,18_MAJ,6_SWO,J_SWO,K_STA
-19_MAJ,7_WAN,10_SWO,8_WAN,4_MAJ,8_STA,6_CUP
-1_MAJ,5_WAN,8_SWO,17_MAJ,9_MAJ,9_STA,J_WAN
-10_CUP,7_SWO,10_STA,3_CUP,2_STA,2_CUP,7_CUP
-9_WAN,3_SWO,7_MAJ,10_WAN,7_STA,Q_CUP,J_STA
-
-13_MAJ,8_CUP,5_CUP,J_CUP,11_MAJ,21_MAJ,5_STA
-K_WAN,6_MAJ,Q_SWO,14_MAJ,4_WAN,4_SWO,16_MAJ
-6_WAN,3_WAN,K_SWO,5_MAJ,12_MAJ,2_SWO,4_CUP
-3_MAJ,20_MAJ,8_MAJ,Q_STA,Q_WAN,0_MAJ,6_STA
-K_CUP,2_WAN,4_STA,2_MAJ,10_MAJ,15_MAJ,5_SWO"#;
+    let init = r#"J_CUP,8_CUP,9_WAN,J_STA,21_MAJ,4_CUP,9_CUP
+ 1_MAJ,7_MAJ,10_SWO,15_MAJ,8_STA,6_CUP,10_STA
+ K_SWO,Q_WAN,7_SWO,18_MAJ,12_MAJ,7_CUP,6_MAJ
+ 4_MAJ,Q_SWO,5_MAJ,10_WAN,2_CUP,20_MAJ,7_STA
+ 3_WAN,14_MAJ,K_STA,K_CUP,13_MAJ,Q_STA,J_SWO
+ 
+ 8_MAJ,4_STA,9_MAJ,3_STA,5_SWO,2_SWO,4_SWO
+ Q_CUP,9_SWO,2_STA,K_WAN,19_MAJ,10_CUP,2_MAJ
+ 3_MAJ,5_STA,8_WAN,10_MAJ,6_SWO,2_WAN,16_MAJ
+ 11_MAJ,J_WAN,0_MAJ,6_WAN,7_WAN,5_CUP,3_SWO
+ 8_SWO,17_MAJ,5_WAN,6_STA,4_WAN,3_CUP,9_STA"#;
     let mut b = Board::parse(init);
     b.start();
     dbg!(&b);
