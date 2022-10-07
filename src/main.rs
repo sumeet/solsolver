@@ -1,22 +1,22 @@
 #![feature(variant_count)]
 #![feature(exclusive_range_pattern)]
 
-use pathfinding::prelude::{astar, dijkstra};
-use std::collections::HashSet;
-use std::fmt::{Debug, Display, Formatter, Write};
-use std::hash::{Hash, Hasher};
+use pathfinding::prelude::astar;
+use std::fmt::{Debug, Display, Formatter};
+use std::hash::Hash;
+use std::io::{stdin, Read};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 enum MoveLocation {
     BlockMinorPiles,
-    PlayingArea { index: usize },
+    PlayingArea { pile: usize, depth: usize },
 }
 
 impl Display for MoveLocation {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
             MoveLocation::BlockMinorPiles => f.write_str("BLOCK"),
-            MoveLocation::PlayingArea { index } => Display::fmt(index, f),
+            MoveLocation::PlayingArea { pile, depth: _ } => Display::fmt(pile, f),
         }
     }
 }
@@ -26,6 +26,9 @@ struct Move {
     from: MoveLocation,
     to: MoveLocation,
     card: Card,
+    // we count the number of sucks, so that in the GUI automation side, we know how long
+    // to wait before the next move
+    num_sucks: usize,
 }
 
 impl Display for Move {
@@ -36,6 +39,30 @@ impl Display for Move {
         Display::fmt(&self.from, f)?;
         f.write_str(" -> Pile ")?;
         Display::fmt(&self.to, f)
+    }
+}
+
+trait SerializeMove {
+    fn serialize(&self) -> String;
+}
+
+impl SerializeMove for Move {
+    fn serialize(&self) -> String {
+        format!(
+            "{}-{}@{}",
+            self.from.serialize(),
+            self.to.serialize(),
+            self.num_sucks
+        )
+    }
+}
+
+impl SerializeMove for MoveLocation {
+    fn serialize(&self) -> String {
+        match self {
+            MoveLocation::BlockMinorPiles => "BLOCK".to_string(),
+            MoveLocation::PlayingArea { pile, depth } => format!("{}:{}", pile, depth),
+        }
     }
 }
 
@@ -227,10 +254,6 @@ struct Board {
 }
 
 impl Board {
-    fn start(&mut self) {
-        self.suck_readies_into_receptacles();
-    }
-
     fn is_done(&self) -> bool {
         self.playing_area.iter().all(|pile| pile.is_empty())
     }
@@ -378,14 +401,6 @@ impl Board {
         sucked_cards
     }
 
-    fn last_card_of_every_stack(&self) -> [Option<Card>; NUM_PLAYING_STACKS] {
-        let mut last_cards = [None; NUM_PLAYING_STACKS];
-        for (playing_area_index, stack) in self.playing_area.iter().enumerate() {
-            last_cards[playing_area_index] = stack.last().cloned();
-        }
-        last_cards
-    }
-
     fn last_card_of_every_stack_mut(&mut self) -> [Option<Card>; 11] {
         let mut last_cards = [None; NUM_PLAYING_STACKS];
         for (stack, last_card) in self.playing_area.iter().zip(last_cards.iter_mut()) {
@@ -410,11 +425,15 @@ impl Board {
                 let mut new_board = self.clone();
                 let card = new_board.playing_area[src_index].pop().unwrap();
                 new_board.minor_collection_blocked = Some(card);
-                new_board.start();
+                let sucked_cards = new_board.suck_readies_into_receptacles();
                 let moov = Move {
-                    from: MoveLocation::PlayingArea { index: src_index },
+                    from: MoveLocation::PlayingArea {
+                        pile: src_index,
+                        depth: self.playing_area[src_index].len() - 1,
+                    },
                     to: MoveLocation::BlockMinorPiles,
                     card,
+                    num_sucks: sucked_cards.len(),
                 };
                 boards.push((new_board, moov));
             }
@@ -427,11 +446,18 @@ impl Board {
                     let mut new_board = self.clone();
                     let src_card = new_board.playing_area[src_index].pop().unwrap();
                     new_board.playing_area[dst_index].push(src_card);
-                    new_board.start();
+                    let sucked_cards = new_board.suck_readies_into_receptacles();
                     let moov = Move {
-                        from: MoveLocation::PlayingArea { index: src_index },
-                        to: MoveLocation::PlayingArea { index: dst_index },
+                        from: MoveLocation::PlayingArea {
+                            pile: src_index,
+                            depth: self.playing_area[src_index].len() - 1,
+                        },
+                        to: MoveLocation::PlayingArea {
+                            pile: dst_index,
+                            depth: self.playing_area[dst_index].len(),
+                        },
                         card: src_card,
+                        num_sucks: sucked_cards.len(),
                     };
                     boards.push((new_board, moov));
                 }
@@ -446,11 +472,15 @@ impl Board {
                     let mut new_board = self.clone();
                     let card = new_board.minor_collection_blocked.take().unwrap();
                     new_board.playing_area[dst_index].push(card);
-                    new_board.start();
+                    let sucked_cards = new_board.suck_readies_into_receptacles();
                     let moov = Move {
                         from: MoveLocation::BlockMinorPiles,
-                        to: MoveLocation::PlayingArea { index: dst_index },
+                        to: MoveLocation::PlayingArea {
+                            pile: dst_index,
+                            depth: self.playing_area[dst_index].len(),
+                        },
                         card,
+                        num_sucks: sucked_cards.len(),
                     };
                     boards.push((new_board, moov));
                 }
@@ -462,34 +492,26 @@ impl Board {
 }
 
 fn main() {
-    let init = r#"18_MAJ,4_STA,6_CUP,9_WAN,4_MAJ,6_MAJ,9_MAJ
-9_STA,2_STA,7_STA,0_MAJ,6_STA,4_WAN,5_CUP
-9_SWO,7_SWO,J_STA,Q_WAN,3_CUP,7_MAJ,8_CUP
-2_CUP,Q_SWO,J_CUP,J_WAN,9_CUP,7_CUP,3_WAN
-19_MAJ,20_MAJ,11_MAJ,10_SWO,10_MAJ,10_STA,3_SWO
-
-2_SWO,J_SWO,K_SWO,5_SWO,5_WAN,21_MAJ,8_STA
-13_MAJ,6_SWO,10_WAN,4_SWO,6_WAN,3_MAJ,3_STA
-10_CUP,K_CUP,15_MAJ,8_WAN,Q_CUP,2_WAN,17_MAJ
-K_STA,4_CUP,8_MAJ,1_MAJ,7_WAN,5_MAJ,5_STA
-8_SWO,14_MAJ,2_MAJ,Q_STA,K_WAN,12_MAJ,16_MAJ"#;
-    let mut b = Board::parse(init);
-    b.start();
+    let mut init = String::new();
+    stdin().read_to_string(&mut init).unwrap();
+    let mut b = Board::parse(&init);
+    b.suck_readies_into_receptacles();
     dbg!(&b);
 
-    let (path, score): (Vec<(Board, Option<Move>)>, usize) = astar(
+    let (path, _score): (Vec<(Board, Option<Move>)>, usize) = astar(
         &(b, None),
-        |(b, path)| {
+        |(b, _path)| {
             b.next_boards()
                 .into_iter()
-                .map(|(board, moov)| ((board.clone(), Some(moov)), 1))
+                .map(|(board, moov)| ((board.clone(), Some(moov)), 0))
         },
         |(b, _move)| b.score_lower_is_better(),
         |(b, _move)| b.is_done(),
     )
     .unwrap();
-    dbg!(path
-        .iter()
-        .filter_map(|i| i.1.map(|i| i.to_string()))
-        .collect::<Vec<_>>());
+    let moves = path.iter().filter_map(|i| i.1);
+    for moov in moves {
+        eprintln!("{}", moov);
+        println!("{}", moov.serialize());
+    }
 }
