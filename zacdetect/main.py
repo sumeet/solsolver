@@ -182,7 +182,7 @@ def solve_screen():
     # the solver bin is at ~/solsolver/target/release/solsolver
     # send stacks_str to it as stdin, and let's take a look at the output
     print('running solver...')
-    return check_output(['/home/sumeet/solsolver/target/release/solsolver'],
+    return check_output(['../solsolver/target/release/solsolver'],
                         input=stacks_str.encode('utf-8')).decode('utf-8')
 
 
