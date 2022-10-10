@@ -264,21 +264,10 @@ for _ in range(10):
 
     # grandma movement
     pyautogui.moveTo(*convert_game_screen_px_to_desktop_px(CLOSE_WIN_SCREEN_BUTTON_POS), duration=5)
-
+    # pyautogui click doesn't work here for some reason, so let's try drag instead even though it doesn't make any sense
+    pyautogui.dragTo(*convert_game_screen_px_to_desktop_px(NEW_GAME_BUTTON_POS), duration=0.3)
     # pyautogui click doesn't work here for some reason, so
     # we're just drag to an arbitrary position to simulate a click
-
-    # click the close button, which could close out of the game
-    # if it failed to solve...
-    pyautogui.dragTo(window_center, duration=0.3)
-
-    # ... but that's OK because we'll just enter back into the game
-    # by clicking the center
-    pyautogui.dragTo(*convert_game_screen_px_to_desktop_px(NEW_GAME_BUTTON_POS), duration=0.3)
-
-    # and then we'll click the new game button to get a fresh game
-    # hopefully this logic works even if we beat the game, to get a
-    # fresh one
     pyautogui.dragTo(window_center, duration=0.3)
 
     # and wait some seconds for the cards to be dealt
