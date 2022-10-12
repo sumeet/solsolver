@@ -14,18 +14,6 @@ import numpy as np
 import cv2
 
 
-# thanks https://stackoverflow.com/a/69113998
-def find_image(needle, haystack):
-    # needle = cv2.imread('/content/penguin.png')
-    needle = pyscreeze._load_cv2(needle)
-    # haystack = cv2.imread('/content/picture.png')
-    haystack = pyscreeze._load_cv2(haystack)
-    heat_map = cv2.matchTemplate(haystack, needle, cv2.TM_CCOEFF_NORMED)
-    h, w, _ = needle.shape
-    y, x = np.unravel_index(np.argmax(heat_map), heat_map.shape)
-    return (x, y)
-
-
 window_id = int(getoutput('xdotool search --classname ZachtronicsSolitaire'.strip()))
 # there are 10 starting stacks (and a stack in the middle, that should be skipped)
 num_starting_cards_per_stack = 7
@@ -72,29 +60,24 @@ def save_all_cards_from_screen_to_disk(pil_image):
         card_image.save(f'card_images/card{i}.png')
 
 
-# def locate_all_cards_on_screen():
-#     all_locations = {}
-#     all_card_files = glob.glob('card_images/*.png')
-#     for card_file in all_card_files:
-#         location = next(pyscreeze.locateAll(card_file, pil_image, confidence=0.95))
-#         all_locations[card_file.split('/')[1].split('.')[0]] = location
-#     return all_locations
-
-# speed up locate_all_cards_on_screen by using multiprocessing
 def locate_all_cards_on_screen(pil_image):
     all_locations = {}
     all_card_files = glob.glob('card_images/*.png')
     with multiprocessing.Pool() as pool:
-        results = pool.starmap(locate_card, ((cf, pil_image) for cf in all_card_files))
-    for card_file, location in zip(all_card_files, results):
-        all_locations[card_file.split('/')[1].split('.')[0]] = location
+        results = pool.starmap(find_image, ((cf, pil_image) for cf in all_card_files))
+    for card_file, (x, y, confidence) in zip(all_card_files, results):
+        all_locations[card_file.split('/')[1].split('.')[0]] = (x, y, confidence)
     return all_locations
 
-
-def locate_card(card_file, pil_image):
-    # return next(pyscreeze.locateAll(card_file, pil_image, confidence=0.94))
-    return find_image(card_file, pil_image)
-
+# https://stackoverflow.com/a/69113998
+def find_image(needle, haystack):
+    needle = pyscreeze._load_cv2(needle)
+    haystack = pyscreeze._load_cv2(haystack)
+    heat_map = cv2.matchTemplate(haystack, needle, cv2.TM_CCOEFF_NORMED)
+    h, w, _ = needle.shape
+    y, x = np.unravel_index(np.argmax(heat_map), heat_map.shape)
+    max_confidence = heat_map[y, x]
+    return (x, y, max_confidence)
 
 window_geom = dict(line.split('=') for line in getoutput(f'xdotool getwindowgeometry --shell {window_id}').splitlines())
 for key in window_geom:
@@ -149,12 +132,19 @@ def solve_screen():
     assert len(all_cards_on_screen) == 70
     print(len(all_cards_on_screen.values()))
     print(len(set(all_cards_on_screen.values())))
+
+    # print out all the duplicates in all_cards_on_screen
+    for card, location in all_cards_on_screen.items():
+        if list(all_cards_on_screen.values()).count(location) > 1:
+            print(card, location)
+
+
     assert len(set(all_cards_on_screen.values())) == 70
 
     # organize the cards into stacks, based roughly on their x and y coordinates
     # cards that are roughly the same x coordinate are in the same stack, with increasing y coordinates
     stacks = []
-    for card_name, (x, y) in all_cards_on_screen.items():
+    for card_name, (x, y, confidence) in all_cards_on_screen.items():
         for stack in stacks:
             if abs(stack[0][0] - x) < 10:
                 stack.append((x, y, card_name))
