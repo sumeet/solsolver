@@ -1,5 +1,4 @@
 #![feature(variant_count)]
-#![feature(exclusive_range_pattern)]
 
 use pathfinding::prelude::astar;
 use std::fmt::{Debug, Display, Formatter};
@@ -42,22 +41,19 @@ impl Display for Move {
     }
 }
 
-trait SerializeMove {
-    fn serialize(&self) -> String;
-}
-
-impl SerializeMove for Move {
+impl Move {
     fn serialize(&self) -> String {
         format!(
-            "{}-{}@{}",
+            "{}-{}@{}@{}",
             self.from.serialize(),
             self.to.serialize(),
-            self.num_sucks
+            self.num_sucks,
+            self,
         )
     }
 }
 
-impl SerializeMove for MoveLocation {
+impl MoveLocation {
     fn serialize(&self) -> String {
         match self {
             MoveLocation::BlockMinorPiles => "BLOCK".to_string(),

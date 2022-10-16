@@ -13,7 +13,6 @@ import pyscreeze
 import numpy as np
 import cv2
 
-
 window_id = int(getoutput('xdotool search --classname ZachtronicsSolitaire'.strip()))
 # there are 10 starting stacks (and a stack in the middle, that should be skipped)
 num_starting_cards_per_stack = 7
@@ -69,6 +68,7 @@ def locate_all_cards_on_screen(pil_image):
         all_locations[card_file.split('/')[1].split('.')[0]] = (x, y, confidence)
     return all_locations
 
+
 # https://stackoverflow.com/a/69113998
 def find_image(needle, haystack):
     needle = pyscreeze._load_cv2(needle)
@@ -78,6 +78,7 @@ def find_image(needle, haystack):
     y, x = np.unravel_index(np.argmax(heat_map), heat_map.shape)
     max_confidence = heat_map[y, x]
     return (x, y, max_confidence)
+
 
 window_geom = dict(line.split('=') for line in getoutput(f'xdotool getwindowgeometry --shell {window_id}').splitlines())
 for key in window_geom:
@@ -138,7 +139,6 @@ def solve_screen():
         if list(all_cards_on_screen.values()).count(location) > 1:
             print(card, location)
 
-
     assert len(set(all_cards_on_screen.values())) == 70
 
     # organize the cards into stacks, based roughly on their x and y coordinates
@@ -180,13 +180,14 @@ def parse_position(pos):
     return pos if pos == 'BLOCK' else tuple(map(int, pos.split(':')))
 
 
-Move = namedtuple('Move', 'src dst num_sucks')
+Move = namedtuple('Move', 'src dst num_sucks human_readable')
 
 
 def parse_move(line):
-    move_str, sucks_str = line.split('@')
+    [move_str, sucks_str, human_readable] = line.split('@')
     [src, dst] = map(parse_position, move_str.split('-'))
-    return Move(src=src, dst=dst, num_sucks=int(sucks_str))
+    return Move(src=src, dst=dst, num_sucks=int(sucks_str),
+                human_readable=human_readable)
 
 
 BLOCK_POSITION_IN_GAME_SCREEN = (1661, 163)
