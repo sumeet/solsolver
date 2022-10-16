@@ -234,20 +234,22 @@ NEW_GAME_BUTTON_POS = (872, 148)
 
 # play the game 10 times:
 for _ in range(10):
-    moves = map(parse_move, solve_screen().strip().splitlines())
+    moves = list(map(parse_move, solve_screen().strip().splitlines()))
 
     # first use xdotool to click the center of the window, to activate it
     window_center = (game_window_x_offset + orig_window_size[0] / 2, game_window_y_offset + orig_window_size[1] / 2)
     check_output(['xdotool', 'mousemove', str(window_center[0]), str(window_center[1])])
     check_output(['xdotool', 'click', '1'])
 
+    print(f'solved in {len(moves)} moves')
     for move in moves:
-        print('moving', move)
+        # sleep longer the more sucks there are
+        sleep_time = 0.2 * (1 + (2 * move.num_sucks))
+
+        print(f'{move.human_readable} ({move.num_sucks} sucks, sleep {sleep_time}s)')
         pyautogui.moveTo(*convert_game_screen_px_to_desktop_px(convert_stack_pos_to_game_screen_px(move.src)))
         pyautogui.dragTo(*convert_game_screen_px_to_desktop_px(convert_stack_pos_to_game_screen_px(move.dst)),
                          duration=0.3)
-        # sleep longer the more sucks there are
-        sleep_time = 0.2 * (1 + (2 * move.num_sucks))
         print('sleeping for', sleep_time)
         time.sleep(sleep_time)
 

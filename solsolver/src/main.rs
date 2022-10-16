@@ -139,6 +139,8 @@ enum Suit {
     Star,
 }
 
+const NUM_SUITS: usize = std::mem::variant_count::<Suit>();
+
 impl Display for Suit {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -161,8 +163,6 @@ impl Suit {
         }
     }
 }
-
-const NUM_SUITS: usize = std::mem::variant_count::<Suit>();
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 enum Card {
@@ -418,6 +418,12 @@ impl Board {
             let src_card = src_card.unwrap();
 
             if self.minor_collection_blocked.is_none() {
+                // // filters out a useless move: there is never any reason to block the minor pile
+                // // from a stack that only has one card
+                if src_stack.len() == 1 {
+                    continue;
+                }
+
                 let mut new_board = self.clone();
                 let card = new_board.playing_area[src_index].pop().unwrap();
                 new_board.minor_collection_blocked = Some(card);
@@ -435,7 +441,12 @@ impl Board {
             }
 
             for (dst_index, dst_stack) in self.playing_area.iter().enumerate() {
+                // moving a card to its own stack isn't a move
                 if src_index == dst_index {
+                    continue;
+                }
+                // filters out a non-progress move: moving a card from a 1-stack to another 1-stack
+                if src_stack.len() == 1 && dst_stack.is_empty() {
                     continue;
                 }
                 if dst_stack.is_empty() || dst_stack.last().unwrap().is_next_or_prev(src_card) {
