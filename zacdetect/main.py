@@ -1,4 +1,5 @@
 import io
+import subprocess
 import time
 import multiprocessing
 from collections import namedtuple
@@ -74,10 +75,41 @@ def find_image(needle, haystack):
     needle = pyscreeze._load_cv2(needle)
     haystack = pyscreeze._load_cv2(haystack)
     heat_map = cv2.matchTemplate(haystack, needle, cv2.TM_CCOEFF_NORMED)
-    h, w, _ = needle.shape
     y, x = np.unravel_index(np.argmax(heat_map), heat_map.shape)
     max_confidence = heat_map[y, x]
     return (x, y, max_confidence)
+
+
+def find_best_matches_for_image(needle, haystack):
+    needle = pyscreeze._load_cv2(needle)
+    haystack = pyscreeze._load_cv2(haystack)
+    heat_map = cv2.matchTemplate(haystack, needle, cv2.TM_CCOEFF_NORMED)
+    locations = np.where(heat_map >= 0.8)
+    matches = [(x, y, confidence) for (x, y, confidence) in zip(*locations[::-1], heat_map[locations])]
+    return sorted(matches, key=lambda x: x[2], reverse=True)
+
+# same as locate_all_cards_on_screen, but prevents matching mistakes using the following heuristics:
+# 1. the most confident card matches take precedence
+# 2. if the location of a found card is within 10 square pixels of a previously found card, then continue to the next most confident location
+def locate_all_cards_on_screen_heuristic(pil_image):
+    all_locations = {}
+    all_card_files = glob.glob('card_images/*.png')
+    with multiprocessing.Pool() as pool:
+        results = pool.starmap(find_best_matches_for_image, ((cf, pil_image) for cf in all_card_files))
+
+    card_names = [cf.split('/')[1].split('.')[0] for cf in all_card_files]
+    results_with_card_names = zip(card_names, results)
+    # sort results by the max confidence
+    results_with_card_names = sorted(results_with_card_names, key=lambda x: x[1][0][2], reverse=True)
+
+    for card_name, results in results_with_card_names:
+        for x, y, confidence in results:
+            if any((x - 10) < prev_x < (x + 10) and (y - 10) < prev_y < (y + 10) for prev_x, prev_y, _ in all_locations.values()):
+                continue
+            all_locations[card_name] = (x, y, confidence)
+            break
+
+    return all_locations
 
 
 window_geom = dict(line.split('=') for line in getoutput(f'xdotool getwindowgeometry --shell {window_id}').splitlines())
@@ -123,7 +155,7 @@ def solve_screen():
     pil_image = pil_image.resize(TARGET_RESOLUTION)
 
     print('locating all cards on the screen...')
-    all_cards_on_screen = locate_all_cards_on_screen(pil_image)
+    all_cards_on_screen = locate_all_cards_on_screen_heuristic(pil_image)
 
     print(len(all_cards_on_screen))
 
@@ -157,6 +189,10 @@ def solve_screen():
         stack.sort(key=lambda x: x[1])
     # sort all stacks by x coordinate
     stacks.sort(key=lambda x: x[0][0])
+
+    # validate that each stack has the correct number of cards
+    for i, stack in enumerate(stacks):
+        assert len(stack) == 7, f'stack {i} has {len(stack)} cards: {stack}'
 
     stacks_str = ''
     for i, stack in enumerate(stacks):
@@ -234,7 +270,18 @@ NEW_GAME_BUTTON_POS = (872, 148)
 
 # play the game 10 times:
 for _ in range(10):
-    moves = list(map(parse_move, solve_screen().strip().splitlines()))
+    move_list_str = None
+    try:
+        move_list_str = solve_screen()
+    except subprocess.CalledProcessError:
+        print('solver failed, skipping this game and starting a new one')
+        pyautogui.moveTo(*convert_game_screen_px_to_desktop_px(NEW_GAME_BUTTON_POS), duration=0.3)
+        pyautogui.dragTo(*convert_game_screen_px_to_desktop_px(CLOSE_WIN_SCREEN_BUTTON_POS), duration=0.3)
+        # and wait some seconds for the cards to be dealt
+        time.sleep(6)
+        continue
+
+    moves = list(map(parse_move, move_list_str.strip().splitlines()))
 
     # first use xdotool to click the center of the window, to activate it
     window_center = (game_window_x_offset + orig_window_size[0] / 2, game_window_y_offset + orig_window_size[1] / 2)
