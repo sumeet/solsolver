@@ -88,14 +88,38 @@ def find_best_matches_for_image(needle, haystack):
     matches = [(x, y, confidence) for (x, y, confidence) in zip(*locations[::-1], heat_map[locations])]
     return sorted(matches, key=lambda x: x[2], reverse=True)
 
+
+# the same as find_best_matches_for_image except:
+# if the card filename contains 'MAJ', then match using only the center 1/2 of the image
+# if the filename does not contain 'MAJ', then match only the left 1/2 of the image
+def find_best_matches_for_image_maj(needle_filename, haystack):
+    needle = pyscreeze._load_cv2(needle_filename)
+    haystack = pyscreeze._load_cv2(haystack)
+    if 'MAJ' in needle_filename:
+        needle = needle[:, needle.shape[1] // 4:needle.shape[1] * 3 // 4]
+    else:
+        needle = needle[:, :needle.shape[1] // 2]
+    heat_map = cv2.matchTemplate(haystack, needle, cv2.TM_CCOEFF_NORMED)
+    locations = np.where(heat_map >= 0.8)
+    matches = [(x, y, confidence) for (x, y, confidence) in zip(*locations[::-1], heat_map[locations])]
+    # if the card is a major, and we matched from the center, then restore the x position, making
+    # it seem like we matched from the left edge
+    if 'MAJ' in needle_filename:
+        matches = [(x - needle.shape[1] // 2, y, confidence) for (x, y, confidence) in matches]
+    return sorted(matches, key=lambda x: x[2], reverse=True)
+
+
+
+
+
 # same as locate_all_cards_on_screen, but prevents matching mistakes using the following heuristics:
 # 1. the most confident card matches take precedence
-# 2. if the location of a found card is within 10 square pixels of a previously found card, then continue to the next most confident location
+# 2. if the location of a found card is within 5 square pixels of a previously found card, then continue to the next most confident location
 def locate_all_cards_on_screen_heuristic(pil_image):
     all_locations = {}
     all_card_files = glob.glob('card_images/*.png')
     with multiprocessing.Pool() as pool:
-        results = pool.starmap(find_best_matches_for_image, ((cf, pil_image) for cf in all_card_files))
+        results = pool.starmap(find_best_matches_for_image_maj, ((cf, pil_image) for cf in all_card_files))
 
     card_names = [cf.split('/')[1].split('.')[0] for cf in all_card_files]
     results_with_card_names = zip(card_names, results)
@@ -104,7 +128,8 @@ def locate_all_cards_on_screen_heuristic(pil_image):
 
     for card_name, results in results_with_card_names:
         for x, y, confidence in results:
-            if any((x - 10) < prev_x < (x + 10) and (y - 10) < prev_y < (y + 10) for prev_x, prev_y, _ in all_locations.values()):
+            if any((x - 5) < prev_x < (x + 5) and (y - 5) < prev_y < (y + 5) for prev_x, prev_y, _ in
+                   all_locations.values()):
                 continue
             all_locations[card_name] = (x, y, confidence)
             break
@@ -269,7 +294,7 @@ CLOSE_WIN_SCREEN_BUTTON_POS = (2095, 49)
 NEW_GAME_BUTTON_POS = (872, 148)
 
 # play the game 10 times:
-for _ in range(10):
+for _ in range(100):
     move_list_str = None
     try:
         move_list_str = solve_screen()
