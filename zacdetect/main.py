@@ -92,15 +92,6 @@ def find_best_matches_for_image_maj(needle_filename, haystack):
     locations = np.where(heat_map >= 0.8)
     matches = [(x, y, confidence) for (x, y, confidence) in zip(*locations[::-1], heat_map[locations])]
 
-    # if '20_MAJ' in needle_filename:
-    #     123
-    #     pass
-    #
-    # if '10_CUP' in needle_filename:
-    #     123
-    #     pass
-
-
     # if the card is a major, and we matched from the center, then restore the x position, making
     # it seem like we matched from the left edge
     if 'MAJ' in needle_filename:
