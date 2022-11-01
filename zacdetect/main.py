@@ -60,26 +60,6 @@ def save_all_cards_from_screen_to_disk(pil_image):
         card_image.save(f'card_images/card{i}.png')
 
 
-def locate_all_cards_on_screen(pil_image):
-    all_locations = {}
-    all_card_files = glob.glob('card_images/*.png')
-    with multiprocessing.Pool() as pool:
-        results = pool.starmap(find_image, ((cf, pil_image) for cf in all_card_files))
-    for card_file, (x, y, confidence) in zip(all_card_files, results):
-        all_locations[card_file.split('/')[1].split('.')[0]] = (x, y, confidence)
-    return all_locations
-
-
-# https://stackoverflow.com/a/69113998
-def find_image(needle, haystack):
-    needle = pyscreeze._load_cv2(needle)
-    haystack = pyscreeze._load_cv2(haystack)
-    heat_map = cv2.matchTemplate(haystack, needle, cv2.TM_CCOEFF_NORMED)
-    y, x = np.unravel_index(np.argmax(heat_map), heat_map.shape)
-    max_confidence = heat_map[y, x]
-    return (x, y, max_confidence)
-
-
 def find_best_matches_for_image(needle, haystack):
     needle = pyscreeze._load_cv2(needle)
     haystack = pyscreeze._load_cv2(haystack)
@@ -88,29 +68,45 @@ def find_best_matches_for_image(needle, haystack):
     matches = [(x, y, confidence) for (x, y, confidence) in zip(*locations[::-1], heat_map[locations])]
     return sorted(matches, key=lambda x: x[2], reverse=True)
 
-
 # the same as find_best_matches_for_image except:
 # if the card filename contains 'MAJ', then match using only the center 1/2 of the image
 # if the filename does not contain 'MAJ', then match only the left 1/2 of the image
 def find_best_matches_for_image_maj(needle_filename, haystack):
     needle = pyscreeze._load_cv2(needle_filename)
     haystack = pyscreeze._load_cv2(haystack)
+    orig_needle = needle
     if 'MAJ' in needle_filename:
-        needle = needle[:, needle.shape[1] // 4:needle.shape[1] * 3 // 4]
+        # cut 3px off the top
+        # cut 2px off the bottom
+        # and only match the center 1/4 of the card
+        needle = needle[3:-2, needle.shape[1] * 3 // 8:needle.shape[1] * 5 // 8]
     else:
-        needle = needle[:, :needle.shape[1] // 2]
+        # only match the left 1/4 of the card, and shift to the right by 5px
+        # extend to the right by 15px
+        needle = needle[:, 5:(needle.shape[1] * 2 // 8) + 20]
+
+    # cut 5px off the top and bottom of needle
+    needle = needle[5:needle.shape[0] - 5, :]
+
     heat_map = cv2.matchTemplate(haystack, needle, cv2.TM_CCOEFF_NORMED)
     locations = np.where(heat_map >= 0.8)
     matches = [(x, y, confidence) for (x, y, confidence) in zip(*locations[::-1], heat_map[locations])]
+
+    # if '20_MAJ' in needle_filename:
+    #     123
+    #     pass
+    #
+    # if '10_CUP' in needle_filename:
+    #     123
+    #     pass
+
+
     # if the card is a major, and we matched from the center, then restore the x position, making
     # it seem like we matched from the left edge
     if 'MAJ' in needle_filename:
-        matches = [(x - needle.shape[1] // 2, y, confidence) for (x, y, confidence) in matches]
+        matches = [(x - (3*orig_needle.shape[1] // 8), y, confidence) for (x, y, confidence) in matches]
+
     return sorted(matches, key=lambda x: x[2], reverse=True)
-
-
-
-
 
 # same as locate_all_cards_on_screen, but prevents matching mistakes using the following heuristics:
 # 1. the most confident card matches take precedence
