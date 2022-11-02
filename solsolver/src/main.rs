@@ -1,9 +1,18 @@
 #![feature(variant_count)]
 
+use cap::Cap;
 use pathfinding::prelude::astar;
+use std::alloc;
+use std::cmp::Ordering;
 use std::fmt::{Debug, Display, Formatter};
 use std::hash::Hash;
 use std::io::{stdin, Read};
+use std::ops::Add;
+
+const MEMORY_LIMIT_BYTES: usize = 8 * 1024 * 1024 * 1024;
+
+#[global_allocator]
+static ALLOCATOR: Cap<alloc::System> = Cap::new(alloc::System, MEMORY_LIMIT_BYTES);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 enum MoveLocation {
@@ -300,13 +309,13 @@ impl Board {
         }
     }
 
-    fn score_lower_is_better(&self) -> usize {
+    fn num_cards_remaining(&self) -> usize {
         self.playing_area
             .iter()
             .map(|stack| stack.len())
             .sum::<usize>()
-            // TODO: sometimes commenting this bottom part out makes it so we complete instead of not completing ???
-            + self.minor_collection_blocked.is_some() as usize
+        // TODO: sometimes commenting this bottom part out makes it so we complete instead of not completing ???
+        + self.minor_collection_blocked.is_some() as usize
     }
 
     fn suck_readies_into_receptacles(&mut self) -> Vec<Card> {
