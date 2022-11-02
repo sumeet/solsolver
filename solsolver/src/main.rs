@@ -514,14 +514,17 @@ fn main() {
     b.suck_readies_into_receptacles();
     dbg!(&b);
 
-    let (path, _score): (Vec<(Board, Option<Move>)>, usize) = astar(
+    let (path, _score): (Vec<(Board, Option<Move>)>, Cost) = astar(
         &(b, None),
         |(b, _path)| {
-            b.next_boards()
-                .into_iter()
-                .map(|(board, moov)| ((board.clone(), Some(moov)), 0))
+            b.next_boards().into_iter().map(|(board, moov)| {
+                (
+                    (board.clone(), Some(moov)),
+                    Cost::ScaleDownEdgeDistance { n: 1, scale_by: 10 },
+                )
+            })
         },
-        |(b, _move)| b.score_lower_is_better(),
+        |(b, _move)| Cost::Heuristic(b.num_cards_remaining()),
         |(b, _move)| b.is_done(),
     )
     .unwrap();
@@ -529,5 +532,82 @@ fn main() {
     for moov in moves {
         eprintln!("{}", moov);
         println!("{}", moov.serialize());
+    }
+}
+
+#[derive(Clone, Copy)]
+enum Cost {
+    ScaleDownEdgeDistance { n: usize, scale_by: usize },
+    Heuristic(usize),
+    Added(usize),
+}
+
+impl Cost {
+    fn value(&self) -> usize {
+        match self {
+            Cost::ScaleDownEdgeDistance { n, scale_by } => n / scale_by,
+            Cost::Heuristic(n) | Cost::Added(n) => *n,
+        }
+    }
+}
+
+impl Eq for Cost {}
+
+impl PartialEq<Self> for Cost {
+    fn eq(&self, other: &Self) -> bool {
+        self.value() == other.value()
+    }
+}
+
+impl PartialOrd<Self> for Cost {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        self.value().partial_cmp(&other.value())
+    }
+}
+
+impl Ord for Cost {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.value().cmp(&other.value())
+    }
+}
+
+impl Add<Self> for Cost {
+    type Output = Self;
+
+    fn add(self, rhs: Self) -> Self::Output {
+        match (self, rhs) {
+            (
+                Cost::ScaleDownEdgeDistance { n, scale_by },
+                Cost::ScaleDownEdgeDistance {
+                    n: n2,
+                    scale_by: scale_by2,
+                },
+            ) => {
+                assert_eq!(scale_by, scale_by2);
+                Cost::ScaleDownEdgeDistance {
+                    n: n + n2,
+                    scale_by,
+                }
+            }
+            (Cost::Heuristic(n), Cost::Heuristic(n2)) => Cost::Heuristic(n + n2),
+
+            (lhs @ Cost::ScaleDownEdgeDistance { .. }, rhs @ Cost::Heuristic(_))
+            | (lhs @ Cost::Heuristic(_), rhs @ Cost::ScaleDownEdgeDistance { .. }) => {
+                Cost::Added(lhs.value() + rhs.value())
+            }
+
+            (lhs @ Cost::Added(_), rhs @ _) => Cost::Added(lhs.value() + rhs.value()),
+            (lhs @ _, rhs @ Cost::Added(_)) => Cost::Added(lhs.value() + rhs.value()),
+        }
+    }
+}
+
+impl pathfinding::num_traits::Zero for Cost {
+    fn zero() -> Self {
+        Cost::Heuristic(0)
+    }
+
+    fn is_zero(&self) -> bool {
+        self.value() == 0
     }
 }
