@@ -6,8 +6,17 @@ use std::alloc;
 use std::fmt::{Debug, Display, Formatter};
 use std::hash::Hash;
 use std::io::{stdin, Read};
+
+// TODO: can we query how much memory's on the machine?
 const MEMORY_LIMIT_BYTES: usize = 8 * 1024 * 1024 * 1024;
 
+// HAX: sometimes we're not actually able to solve the position, i don't know why. but if we limit
+// the memory usage of the global allocator, we can more gracefully exit without taking down the
+// rest of the system
+//
+// there's something over on the python side that'll just restart the whole game and try to solve
+// a new position if we exit with a non-zero exit code, which is what happens when this Cap limited
+// global allocator runs out of memory
 #[global_allocator]
 static ALLOCATOR: Cap<alloc::System> = Cap::new(alloc::System, MEMORY_LIMIT_BYTES);
 
