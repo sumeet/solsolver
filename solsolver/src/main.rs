@@ -3,12 +3,9 @@
 use cap::Cap;
 use pathfinding::prelude::astar;
 use std::alloc;
-use std::cmp::Ordering;
 use std::fmt::{Debug, Display, Formatter};
 use std::hash::Hash;
 use std::io::{stdin, Read};
-use std::ops::Add;
-
 const MEMORY_LIMIT_BYTES: usize = 8 * 1024 * 1024 * 1024;
 
 #[global_allocator]
@@ -521,7 +518,7 @@ fn main() {
                 .into_iter()
                 .map(|(board, moov)| ((board.clone(), Some(moov)), 0))
         },
-        |(b, _move)| b.score_lower_is_better(),
+        |(b, _move)| b.num_cards_remaining(),
         |(b, _move)| b.is_done(),
     )
     .unwrap();
