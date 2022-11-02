@@ -9,7 +9,7 @@ import glob
 import os
 from subprocess import getoutput, check_output
 
-jmport pyautogui
+import pyautogui
 import pyscreeze
 import numpy as np
 import cv2
