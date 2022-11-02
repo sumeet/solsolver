@@ -9,7 +9,7 @@ import glob
 import os
 from subprocess import getoutput, check_output
 
-import pyautogui
+jmport pyautogui
 import pyscreeze
 import numpy as np
 import cv2
@@ -97,6 +97,8 @@ def find_best_matches_for_image_maj(needle_filename, haystack):
     if 'MAJ' in needle_filename:
         matches = [(x - (3*orig_needle.shape[1] // 8), y, confidence) for (x, y, confidence) in matches]
 
+    # prevents us from thinking the score counter is actually a major card, they use the same font
+    matches = (m for m in matches if m[0] >= 100 and m[1] >= 100)
     return sorted(matches, key=lambda x: x[2], reverse=True)
 
 # same as locate_all_cards_on_screen, but prevents matching mistakes using the following heuristics:
@@ -280,8 +282,7 @@ def convert_game_screen_px_to_desktop_px(pos):
 CLOSE_WIN_SCREEN_BUTTON_POS = (2095, 49)
 NEW_GAME_BUTTON_POS = (872, 148)
 
-# play the game 10 times:
-for _ in range(100):
+while True:
     move_list_str = None
     try:
         move_list_str = solve_screen()
