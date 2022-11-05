@@ -273,7 +273,9 @@ struct Board {
     last_n_moves: VecDeque<Move>,
 }
 
-const NUM_PREV_MOVES_TO_CONSIDERS: [usize; 3] = [5, 10, 15];
+// HAX: 69 is used to indicate that we don't limit the num_prev_moves, and instead use what we were using before: no limit to prune the search tree. SOMETIMES that was producing better results
+const OLD: usize = 69;
+const NUM_PREV_MOVES_TO_CONSIDERS: [usize; 4] = [5, 10, 15, OLD];
 
 const fn const_max(ns: &[usize]) -> usize {
     let mut max = 0;
@@ -462,7 +464,7 @@ impl Board {
 
         const MINIMUM_AMT_OF_PROGRESS: usize = 1;
 
-        if num_prev_moves_to_consider != 69
+        if num_prev_moves_to_consider != OLD
             && self.last_n_moves.len() >= num_prev_moves_to_consider
             && self
                 .last_n_moves
@@ -587,37 +589,10 @@ fn main() {
         })
         .min_by_key(|path| path.len())
         .unwrap();
-    // let (path, _score): (Vec<(Board, Option<Move>)>, usize) = astar(
-    //     &(b, None),
-    //     |(b, _path)| {
-    //         b.next_boards()
-    //             .into_iter()
-    //             .map(|(board, moov)| ((board.clone(), Some(moov)), 0))
-    //     },
-    //     |(b, _move)| b.num_cards_remaining(),
-    //     |(b, _move)| b.is_done(),
-    // )
-    // .unwrap();
-
-    let new = path.len();
-    dbg!(new);
-    let old = astar(
-        &(b.clone(), None),
-        |(b, _path)| {
-            b.next_boards(69)
-                .into_iter()
-                .map(|(board, moov)| ((board.clone(), Some(moov)), 0))
-        },
-        |(b, _move)| b.num_cards_remaining(),
-        |(b, _move)| b.is_done(),
-    )
-    .unwrap()
-    .0;
-    dbg!(old.len());
 
     let moves = path.iter().filter_map(|i| i.1);
     for moov in moves {
-        eprintln!("{}", moov);
+        eprintln!("{} ({} sucks)", moov, moov.num_sucks);
         println!("{}", moov.serialize());
     }
 }
