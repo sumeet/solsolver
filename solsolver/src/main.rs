@@ -1,8 +1,13 @@
 #![feature(variant_count)]
+#![feature(const_option)]
+#![feature(const_for)]
 
 use cap::Cap;
+use derivative::Derivative;
 use pathfinding::prelude::astar;
+use rayon::prelude::*;
 use std::alloc;
+use std::collections::VecDeque;
 use std::fmt::{Debug, Display, Formatter};
 use std::hash::Hash;
 use std::io::{stdin, Read};
@@ -255,16 +260,45 @@ impl Card {
 
 const NUM_PLAYING_STACKS: usize = 11;
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+// #[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Derivative)]
+#[derivative(PartialEq, Eq, Hash)]
 struct Board {
     major_lower_stack: Vec<Card>,
     major_higher_stack: Vec<Card>,
     minor_collection_piles: [Vec<Card>; NUM_SUITS],
     minor_collection_blocked: Option<Card>,
     playing_area: [Vec<Card>; NUM_PLAYING_STACKS],
+    #[derivative(PartialEq = "ignore", Hash = "ignore")]
+    last_n_moves: VecDeque<Move>,
 }
 
+const NUM_PREV_MOVES_TO_CONSIDERS: [usize; 3] = [5, 10, 15];
+
+const fn const_max(ns: &[usize]) -> usize {
+    let mut max = 0;
+    let mut i = 0;
+    while i < ns.len() {
+        if ns[i] > max {
+            max = ns[i];
+        }
+        i += 1;
+    }
+    max
+}
+
+const MAX_NUM_PREV_MOVES_TO_CONSIDER: usize = const_max(&NUM_PREV_MOVES_TO_CONSIDERS);
+
 impl Board {
+    fn with_prev_move(self, prev_move: Move) -> Self {
+        let mut new_board = self;
+        new_board.last_n_moves.push_front(prev_move);
+        if new_board.last_n_moves.len() > MAX_NUM_PREV_MOVES_TO_CONSIDER {
+            new_board.last_n_moves.pop_back();
+        }
+        new_board
+    }
+
     fn is_done(&self) -> bool {
         self.playing_area.iter().all(|pile| pile.is_empty())
     }
@@ -290,6 +324,7 @@ impl Board {
             }
         }
         Self {
+            last_n_moves: VecDeque::new(),
             major_higher_stack: vec![],
             major_lower_stack: vec![],
             minor_collection_piles: [
@@ -422,8 +457,23 @@ impl Board {
         last_cards
     }
 
-    fn next_boards(&self) -> Vec<(Self, Move)> {
+    fn next_boards(&self, num_prev_moves_to_consider: usize) -> Vec<(Self, Move)> {
         let mut boards = vec![];
+
+        const MINIMUM_AMT_OF_PROGRESS: usize = 1;
+
+        if num_prev_moves_to_consider != 69
+            && self.last_n_moves.len() >= num_prev_moves_to_consider
+            && self
+                .last_n_moves
+                .iter()
+                .take(num_prev_moves_to_consider)
+                .map(|m| m.num_sucks)
+                .sum::<usize>()
+                <= MINIMUM_AMT_OF_PROGRESS
+        {
+            return boards;
+        }
 
         for (src_index, src_stack) in self.playing_area.iter().enumerate() {
             let src_card = src_stack.last().copied();
@@ -452,7 +502,7 @@ impl Board {
                     card,
                     num_sucks: sucked_cards.len(),
                 };
-                boards.push((new_board, moov));
+                boards.push((new_board.with_prev_move(moov), moov));
             }
 
             for (dst_index, dst_stack) in self.playing_area.iter().enumerate() {
@@ -481,7 +531,7 @@ impl Board {
                         card: src_card,
                         num_sucks: sucked_cards.len(),
                     };
-                    boards.push((new_board, moov));
+                    boards.push((new_board.with_prev_move(moov), moov));
                 }
             }
         }
@@ -504,7 +554,7 @@ impl Board {
                         card,
                         num_sucks: sucked_cards.len(),
                     };
-                    boards.push((new_board, moov));
+                    boards.push((new_board.with_prev_move(moov), moov));
                 }
             }
         }
@@ -520,17 +570,51 @@ fn main() {
     b.suck_readies_into_receptacles();
     dbg!(&b);
 
-    let (path, _score): (Vec<(Board, Option<Move>)>, usize) = astar(
-        &(b, None),
+    let path = NUM_PREV_MOVES_TO_CONSIDERS
+        .into_par_iter()
+        .filter_map(|num_prev_moves| {
+            let (path, _score): (Vec<(Board, Option<Move>)>, usize) = astar(
+                &(b.clone(), None),
+                |(b, _path)| {
+                    b.next_boards(num_prev_moves)
+                        .into_iter()
+                        .map(|(board, moov)| ((board.clone(), Some(moov)), 0))
+                },
+                |(b, _move)| b.num_cards_remaining(),
+                |(b, _move)| b.is_done(),
+            )?;
+            Some(path)
+        })
+        .min_by_key(|path| path.len())
+        .unwrap();
+    // let (path, _score): (Vec<(Board, Option<Move>)>, usize) = astar(
+    //     &(b, None),
+    //     |(b, _path)| {
+    //         b.next_boards()
+    //             .into_iter()
+    //             .map(|(board, moov)| ((board.clone(), Some(moov)), 0))
+    //     },
+    //     |(b, _move)| b.num_cards_remaining(),
+    //     |(b, _move)| b.is_done(),
+    // )
+    // .unwrap();
+
+    let new = path.len();
+    dbg!(new);
+    let old = astar(
+        &(b.clone(), None),
         |(b, _path)| {
-            b.next_boards()
+            b.next_boards(69)
                 .into_iter()
                 .map(|(board, moov)| ((board.clone(), Some(moov)), 0))
         },
         |(b, _move)| b.num_cards_remaining(),
         |(b, _move)| b.is_done(),
     )
-    .unwrap();
+    .unwrap()
+    .0;
+    dbg!(old.len());
+
     let moves = path.iter().filter_map(|i| i.1);
     for moov in moves {
         eprintln!("{}", moov);
