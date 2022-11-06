@@ -273,8 +273,8 @@ struct Board {
     last_n_moves: VecDeque<Move>,
 }
 
-// HAX: 69 is used to indicate that we don't limit the num_prev_moves, and instead use what we were using before: no limit to prune the search tree. SOMETIMES that was producing better results
-const OLD: usize = 69;
+// HAX: OLD is used to indicate that we don't limit the num_prev_moves, and instead use what we were using before: no limit to prune the search tree. SOMETIMES that was producing better results
+const OLD: usize = 0;
 const NUM_PREV_MOVES_TO_CONSIDERS: [usize; 4] = [5, 10, 15, OLD];
 
 const fn const_max(ns: &[usize]) -> usize {
@@ -590,8 +590,7 @@ fn main() {
         .min_by_key(|path| path.len())
         .unwrap();
 
-    let moves = path.iter().filter_map(|i| i.1);
-    for moov in moves {
+    for moov in path.iter().filter_map(|(_, moov)| moov.as_ref()) {
         eprintln!("{} ({} sucks)", moov, moov.num_sucks);
         println!("{}", moov.serialize());
     }
