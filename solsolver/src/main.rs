@@ -4,7 +4,7 @@
 
 use cap::Cap;
 use derivative::Derivative;
-use pathfinding::prelude::astar;
+use pathfinding::prelude::{astar, dijkstra, fringe, idastar};
 use rayon::prelude::*;
 use std::alloc;
 use std::collections::VecDeque;
@@ -575,21 +575,31 @@ fn main() {
     let path = NUM_PREV_MOVES_TO_CONSIDERS
         .into_par_iter()
         .filter_map(|num_prev_moves| {
-            let (path, _score): (Vec<(Board, Option<Move>)>, usize) = astar(
+            let (path, _score): (Vec<(Board, Option<Move>)>, _) = astar(
                 &(b.clone(), None),
                 |(b, _path)| {
                     b.next_boards(num_prev_moves)
                         .into_iter()
-                        .map(|(board, moov)| ((board.clone(), Some(moov)), 0))
+                        .map(|(board, moov)| ((board.clone(), Some(moov)), 1))
                 },
-                |(b, _move)| b.num_cards_remaining(),
+                |(b, _move)| (b.num_cards_remaining() as f32 * 0.5).round() as _,
                 |(b, _move)| b.is_done(),
             )?;
             Some(path)
         })
         .min_by_key(|path| path.len())
         .unwrap();
-
+    // let (path, _score): (Vec<(Board, Option<Move>)>, _) = astar(
+    //     &(b.clone(), None),
+    //     |(b, _path)| {
+    //         b.next_boards(OLD)
+    //             .into_iter()
+    //             .map(|(board, moov)| ((board.clone(), Some(moov)), 1))
+    //     },
+    //     |(b, _move)| (b.num_cards_remaining() as f32 * 1.5).round() as usize,
+    //     |(b, _move)| b.is_done(),
+    // )
+    // .unwrap();
     for moov in path.iter().filter_map(|(_, moov)| moov.as_ref()) {
         eprintln!("{} ({} sucks)", moov, moov.num_sucks);
         println!("{}", moov.serialize());
